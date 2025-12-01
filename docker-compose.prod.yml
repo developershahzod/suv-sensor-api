@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: sensor_db_prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sensor_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sensor_password}
+      POSTGRES_DB: ${POSTGRES_DB:-sensor_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sensor_user} -d ${POSTGRES_DB:-sensor_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sensor_network
+
+  api:
+    image: ${DOCKER_IMAGE:-your-dockerhub-username/sensor-api:latest}
+    container_name: sensor_api_prod
+    restart: always
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sensor_user}:${POSTGRES_PASSWORD:-sensor_password}@db:5432/${POSTGRES_DB:-sensor_db}
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - sensor_network
+    # Production: no hot-reload, multiple workers
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+volumes:
+  postgres_data_prod:
+
+networks:
+  sensor_network:
+    driver: bridge

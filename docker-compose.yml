@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: sensor_db
+    restart: always
+    environment:
+      POSTGRES_USER: sensor_user
+      POSTGRES_PASSWORD: sensor_password
+      POSTGRES_DB: sensor_db
+    ports:
+      - "5433:5432"  # Using 5433 to avoid conflict with local PostgreSQL
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sensor_user -d sensor_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: sensor_api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://sensor_user:sensor_password@db:5432/sensor_db
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production-use-openssl-rand-hex-32}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
